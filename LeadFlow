@@ -1,0 +1,74 @@
+name: Expand LeadFlow source package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: expand-leadflow-main
+  cancel-in-progress: false
+
+jobs:
+  expand-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Extract the Cloudflare-ready project into the repository root
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ARCHIVE="LeadFlow_Cloudflare_Fix_v0.5.3.zip"
+          SOURCE_DIR="LeadFlow_Cloudflare_Fix_v0.5.3"
+          TMP_DIR="$(mktemp -d)"
+          trap 'rm -rf "$TMP_DIR"' EXIT
+
+          if [[ ! -f "$ARCHIVE" ]]; then
+            echo "::error::Could not find $ARCHIVE in the repository root."
+            exit 1
+          fi
+
+          unzip -q "$ARCHIVE" -d "$TMP_DIR"
+          APP_DIR="$TMP_DIR/$SOURCE_DIR"
+
+          for required in package.json open-next.config.ts wrangler.jsonc src; do
+            if [[ ! -e "$APP_DIR/$required" ]]; then
+              echo "::error::The archive is missing $required."
+              exit 1
+            fi
+          done
+
+          # Preserve the repository's existing LICENSE; replace application files.
+          cp -a "$APP_DIR/." .
+          rm -f "$ARCHIVE" "LeadFlow_Replit_Cloud_v0.5.2.zip"
+
+          # Confirm Cloudflare's required files are at the root.
+          test -f package.json
+          test -f open-next.config.ts
+          test -f wrangler.jsonc
+          test -d src
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No changes were needed."
+          else
+            git commit -m "chore: expand LeadFlow Cloudflare app into repository root"
+            git push
+          fi
+
+      - name: Verify extracted project files
+        run: |
+          test -f package.json
+          test -f open-next.config.ts
+          test -f wrangler.jsonc
+          test -d src
+          echo "LeadFlow source files are in the repository root."
